@@ -24,7 +24,7 @@ jobs:
     - name: Configurar Git
       run: |
         git config --global user.name "Fakezay"
-        git config --global user.email "fakezay@exemplo.com"
+        git config --global user.email "fakezaydev@gmail.com"
 
     - name: Sincronizar Manifesto TWRP (AOSP 11)
       run: |
