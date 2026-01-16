@@ -21,11 +21,7 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     bootctrl.jr510
 
-PRODUCT_STATIC_BOOT_CONTROL_HAL := \
-    bootctrl.jr510 \
-    libgptutils \
-    libz \
-    libcutils
+
 
 PRODUCT_PACKAGES += \
     otapreopt_script \
