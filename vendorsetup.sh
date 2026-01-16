@@ -5,6 +5,3 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-add_lunch_combo omni_frost-user
-add_lunch_combo omni_frost-userdebug
-add_lunch_combo omni_frost-eng
