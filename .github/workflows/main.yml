@@ -10,30 +10,35 @@ jobs:
       contents: write
 
     steps:
-    - name: Checkout do seu repo
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: 🗑️ Limpeza Extrema de Disco (Liberar +30GB)
+    # --- A SOLUÇÃO DO PROBLEMA DE ESPAÇO ---
+    - name: 🧹 Limpeza Profunda (Maximize Build Space)
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 2048
+        swap-size-mb: 1024
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+        overprovision-lvm: 'true'
+
+    - name: Verificar Espaço Livre
       run: |
-        # Apaga softwares pesados que não vamos usar (Android SDK, .NET, CodeQL)
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/graalvm
-        sudo rm -rf /usr/local/.ghcup
-        sudo rm -rf /usr/local/share/powershell
-        sudo rm -rf /usr/local/lib/node_modules
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/share/boost
-        # Limpa o cache do apt
-        sudo apt-get clean
-        # Mostra o espaço livre final
+        echo "Espaço disponível após limpeza:"
         df -h
+    # ---------------------------------------
 
     - name: 🐳 Compilar dentro do Docker (Ubuntu 20.04)
-      # Aqui está o segredo: Rodamos o Docker manualmente mapeando o disco limpo
       run: |
+        # Baixa a imagem limpa
+        docker pull ubuntu:20.04
+        
         docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:20.04 /bin/bash -c "
-          # 1. Configurar o ambiente dentro do container
+          # 1. Preparar Ambiente
           apt-get update && \
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             git-core gnupg flex bison build-essential zip curl zlib1g-dev \
@@ -41,32 +46,29 @@ jobs:
             x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
             xsltproc unzip fontconfig python2 python3 rsync sudo && \
           
-          # Linkar python
           ln -s /usr/bin/python2 /usr/bin/python && \
 
-          # 2. Instalar o Repo
+          # 2. Repo e Git
           curl https://storage.googleapis.com/git-repo-downloads/repo > /usr/bin/repo && \
           chmod a+x /usr/bin/repo && \
-
-          # 3. Configurar Git
           git config --global user.name 'Fakezay' && \
           git config --global user.email 'fakezaydev@gmail.com' && \
 
-          # 4. Sincronizar Código (Com otimizações de espaço)
+          # 3. Sync (Otimizado para economizar espaço)
           mkdir twrp && cd twrp && \
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 && \
           repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all) && \
 
-          # 5. Clonar sua Device Tree
+          # 4. Clonar Device Tree
           git clone https://github.com/Fakezay/twrp_frost device/xiaomi/frost && \
 
-          # 6. Compilar
+          # 5. Compilar
           export ALLOW_MISSING_DEPENDENCIES=true && \
           . build/envsetup.sh && \
           lunch omni_frost-eng && \
           mka recoveryimage -j$(nproc --all) && \
           
-          # Mover o arquivo final para fora do container
+          # Copiar resultado para fora do container
           cp out/target/product/frost/recovery.img /workspace/recovery.img
         "
 
