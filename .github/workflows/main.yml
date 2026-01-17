@@ -1,4 +1,4 @@
-name: Compilar TWRP - Poco C40 (Final v2)
+name: Compilar TWRP - Poco C40 (Final v3)
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ jobs:
         remove-docker-images: 'true'
         overprovision-lvm: 'true'
 
-    - name: 🐳 Compilar (com Extrator Python)
+    - name: 🐳 Compilar (Link LineageOS)
       run: |
         docker pull ubuntu:20.04
         
@@ -51,18 +51,19 @@ jobs:
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 && \
           repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all) && \
 
-          # 4. Clonar Device Tree e EXTRAIR KERNEL (Modo Python)
+          # 4. Clonar Device Tree e EXTRAIR KERNEL
           git clone https://github.com/Fakezay/twrp_frost device/xiaomi/frost && \
           
-          echo 'Baixando extrator moderno...' && \
+          echo 'Baixando extrator (Link LineageOS)...' && \
           cd device/xiaomi/frost && \
-          wget https://raw.githubusercontent.com/osm0sis/mkbootimg/master/unpack_bootimg.py && \
+          # Link direto da LineageOS que é 100% garantido
+          wget https://raw.githubusercontent.com/LineageOS/android_system_tools_mkbootimg/lineage-19.1/unpack_bootimg.py -O unpack_bootimg.py && \
           chmod +x unpack_bootimg.py && \
           
           echo 'Extraindo Kernel do boot.img...' && \
           python3 unpack_bootimg.py --boot_img boot.img --out . && \
           
-          # O script cria um arquivo chamado 'kernel', verificamos se ele existe
+          # Confere se o arquivo 'kernel' apareceu
           ls -l kernel && \
           cd ../../.. && \
 
