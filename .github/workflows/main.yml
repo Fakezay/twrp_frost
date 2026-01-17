@@ -1,4 +1,4 @@
-name: Compilar TWRP - Poco C40 (Final v4 - LFS Fix)
+name: Compilar TWRP - Poco C40 (Final v5 - LFS Docker Fix)
 
 on:
   workflow_dispatch:
@@ -10,10 +10,10 @@ jobs:
       contents: write
 
     steps:
-    - name: Checkout (Com suporte a Arquivos Grandes)
+    - name: Checkout
       uses: actions/checkout@v4
       with:
-        lfs: true  # <--- ESSA LINHA RESOLVE O PROBLEMA MÁGICO
+        lfs: true
 
     - name: 🧹 Limpeza de Espaço
       uses: easimon/maximize-build-space@master
@@ -27,19 +27,22 @@ jobs:
         remove-docker-images: 'true'
         overprovision-lvm: 'true'
 
-    - name: 🐳 Compilar (Link LineageOS)
+    - name: 🐳 Compilar (com Git LFS)
       run: |
         docker pull ubuntu:20.04
         
         docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:20.04 /bin/bash -c "
-          # 1. Instalar Ferramentas
+          # 1. Instalar Ferramentas (Adicionado git-lfs aqui)
           apt-get update && \
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             git-core gnupg flex bison build-essential zip curl zlib1g-dev \
             gcc-multilib g++-multilib libc6-dev-i386 libncurses5 lib32ncurses5-dev \
             x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
-            xsltproc unzip fontconfig python2 python3 rsync sudo wget && \
+            xsltproc unzip fontconfig python2 python3 rsync sudo wget git-lfs && \
           
+          # Ativar suporte a arquivos grandes (LFS) <--- CORREÇÃO CRUCIAL
+          git lfs install && \
+
           ln -s /usr/bin/python2 /usr/bin/python && \
 
           # 2. Setup Repo
@@ -54,6 +57,7 @@ jobs:
           repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all) && \
 
           # 4. Clonar Device Tree e EXTRAIR KERNEL
+          # O git clone agora vai baixar o boot.img real graças ao git-lfs
           git clone https://github.com/Fakezay/twrp_frost device/xiaomi/frost && \
           
           echo 'Baixando extrator (Link LineageOS)...' && \
@@ -62,9 +66,9 @@ jobs:
           chmod +x unpack_bootimg.py && \
           
           echo 'Extraindo Kernel do boot.img...' && \
-          # Agora o boot.img será o arquivo real, não o atalho de texto
           python3 unpack_bootimg.py --boot_img boot.img --out . && \
           
+          # Confirmação visual
           ls -l kernel && \
           cd ../../.. && \
 
