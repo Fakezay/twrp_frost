@@ -1,4 +1,4 @@
-name: Compilar TWRP - Poco C40 (frost)
+name: Compilar TWRP - Poco C40 (Final)
 
 on:
   workflow_dispatch:
@@ -13,8 +13,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # --- A SOLUÇÃO DO PROBLEMA DE ESPAÇO ---
-    - name: 🧹 Limpeza Profunda (Maximize Build Space)
+    - name: 🧹 Limpeza de Espaço
       uses: easimon/maximize-build-space@master
       with:
         root-reserve-mb: 2048
@@ -26,54 +25,53 @@ jobs:
         remove-docker-images: 'true'
         overprovision-lvm: 'true'
 
-    - name: Verificar Espaço Livre
+    - name: 🐳 Compilar (com Extração de Kernel)
       run: |
-        echo "Espaço disponível após limpeza:"
-        df -h
-    # ---------------------------------------
-
-    - name: 🐳 Compilar dentro do Docker (Ubuntu 20.04)
-      run: |
-        # Baixa a imagem limpa
         docker pull ubuntu:20.04
         
         docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:20.04 /bin/bash -c "
-          # 1. Preparar Ambiente
+          # 1. Instalar Ferramentas (incluindo abootimg para extrair kernel)
           apt-get update && \
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             git-core gnupg flex bison build-essential zip curl zlib1g-dev \
             gcc-multilib g++-multilib libc6-dev-i386 libncurses5 lib32ncurses5-dev \
             x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
-            xsltproc unzip fontconfig python2 python3 rsync sudo && \
+            xsltproc unzip fontconfig python2 python3 rsync sudo abootimg && \
           
           ln -s /usr/bin/python2 /usr/bin/python && \
 
-          # 2. Repo e Git
+          # 2. Setup Repo
           curl https://storage.googleapis.com/git-repo-downloads/repo > /usr/bin/repo && \
           chmod a+x /usr/bin/repo && \
           git config --global user.name 'Fakezay' && \
           git config --global user.email 'fakezaydev@gmail.com' && \
 
-          # 3. Sync (Otimizado para economizar espaço)
+          # 3. Baixar Fontes
           mkdir twrp && cd twrp && \
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 && \
           repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all) && \
 
-          # 4. Clonar Device Tree
+          # 4. Clonar Device Tree e EXTRAIR KERNEL
           git clone https://github.com/Fakezay/twrp_frost device/xiaomi/frost && \
+          
+          echo 'Extraindo Kernel do boot.img...' && \
+          cd device/xiaomi/frost && \
+          abootimg -x boot.img && \
+          mv zImage kernel && \
+          cd ../../.. && \
 
-          # 5. Compilar
+          # 5. Compilar BootImage (TWRP)
           export ALLOW_MISSING_DEPENDENCIES=true && \
           . build/envsetup.sh && \
           lunch omni_frost-eng && \
-          mka recoveryimage -j$(nproc --all) && \
+          mka bootimage -j$(nproc --all) && \
           
-          # Copiar resultado para fora do container
-          cp out/target/product/frost/recovery.img /workspace/recovery.img
+          # Copiar o boot.img gerado
+          cp out/target/product/frost/boot.img /workspace/twrp-boot.img
         "
 
-    - name: 📤 Upload do Resultado
+    - name: 📤 Upload do TWRP Pronto
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-frost-PocoC40
-        path: recovery.img
+        name: TWRP-BOOT-PocoC40
+        path: twrp-boot.img
