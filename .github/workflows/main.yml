@@ -1,4 +1,4 @@
-name: Compilar TWRP - Poco C40 (Final)
+name: Compilar TWRP - Poco C40 (Final v2)
 
 on:
   workflow_dispatch:
@@ -25,18 +25,18 @@ jobs:
         remove-docker-images: 'true'
         overprovision-lvm: 'true'
 
-    - name: 🐳 Compilar (com Extração de Kernel)
+    - name: 🐳 Compilar (com Extrator Python)
       run: |
         docker pull ubuntu:20.04
         
         docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:20.04 /bin/bash -c "
-          # 1. Instalar Ferramentas (incluindo abootimg para extrair kernel)
+          # 1. Instalar Ferramentas
           apt-get update && \
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             git-core gnupg flex bison build-essential zip curl zlib1g-dev \
             gcc-multilib g++-multilib libc6-dev-i386 libncurses5 lib32ncurses5-dev \
             x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
-            xsltproc unzip fontconfig python2 python3 rsync sudo abootimg && \
+            xsltproc unzip fontconfig python2 python3 rsync sudo wget && \
           
           ln -s /usr/bin/python2 /usr/bin/python && \
 
@@ -51,13 +51,19 @@ jobs:
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 && \
           repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all) && \
 
-          # 4. Clonar Device Tree e EXTRAIR KERNEL
+          # 4. Clonar Device Tree e EXTRAIR KERNEL (Modo Python)
           git clone https://github.com/Fakezay/twrp_frost device/xiaomi/frost && \
           
-          echo 'Extraindo Kernel do boot.img...' && \
+          echo 'Baixando extrator moderno...' && \
           cd device/xiaomi/frost && \
-          abootimg -x boot.img && \
-          mv zImage kernel && \
+          wget https://raw.githubusercontent.com/osm0sis/mkbootimg/master/unpack_bootimg.py && \
+          chmod +x unpack_bootimg.py && \
+          
+          echo 'Extraindo Kernel do boot.img...' && \
+          python3 unpack_bootimg.py --boot_img boot.img --out . && \
+          
+          # O script cria um arquivo chamado 'kernel', verificamos se ele existe
+          ls -l kernel && \
           cd ../../.. && \
 
           # 5. Compilar BootImage (TWRP)
