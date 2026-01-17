@@ -1,4 +1,4 @@
-name: Compilar TWRP - Poco C40 (Final v3)
+name: Compilar TWRP - Poco C40 (Final v4 - LFS Fix)
 
 on:
   workflow_dispatch:
@@ -10,8 +10,10 @@ jobs:
       contents: write
 
     steps:
-    - name: Checkout
+    - name: Checkout (Com suporte a Arquivos Grandes)
       uses: actions/checkout@v4
+      with:
+        lfs: true  # <--- ESSA LINHA RESOLVE O PROBLEMA MÁGICO
 
     - name: 🧹 Limpeza de Espaço
       uses: easimon/maximize-build-space@master
@@ -56,14 +58,13 @@ jobs:
           
           echo 'Baixando extrator (Link LineageOS)...' && \
           cd device/xiaomi/frost && \
-          # Link direto da LineageOS que é 100% garantido
           wget https://raw.githubusercontent.com/LineageOS/android_system_tools_mkbootimg/lineage-19.1/unpack_bootimg.py -O unpack_bootimg.py && \
           chmod +x unpack_bootimg.py && \
           
           echo 'Extraindo Kernel do boot.img...' && \
+          # Agora o boot.img será o arquivo real, não o atalho de texto
           python3 unpack_bootimg.py --boot_img boot.img --out . && \
           
-          # Confere se o arquivo 'kernel' apareceu
           ls -l kernel && \
           cd ../../.. && \
 
@@ -73,7 +74,6 @@ jobs:
           lunch omni_frost-eng && \
           mka bootimage -j$(nproc --all) && \
           
-          # Copiar o boot.img gerado
           cp out/target/product/frost/boot.img /workspace/twrp-boot.img
         "
 
