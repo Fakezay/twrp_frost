@@ -103,3 +103,8 @@ TW_SCREEN_BLANK_ON_BOOT := true
 TW_INPUT_BLACKLIST := "hbtp_vm"
 TW_USE_TOOLBOX := true
 TW_INCLUDE_REPACKTOOLS := true
+
+
+# Desativar Criptografia para evitar travamentos
+TW_INCLUDE_CRYPTO := false
+TW_INCLUDE_FBE := false
