@@ -4,5 +4,4 @@
 /data           f2fs     /dev/block/by-name/userdata            flags=display=data
 /misc           emmc     /dev/block/by-name/misc                flags=display=misc
 /sdcard         vfat     /dev/block/mmcblk1p1                   flags=display=sdcard
-/cust           ext4     /dev/block/bootdevice/by-name/cust     flags=display=cust
 /cache          ext4     /dev/block/by-name/rescue              flags=display=cache
