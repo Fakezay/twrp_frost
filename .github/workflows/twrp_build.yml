@@ -1,0 +1,53 @@
+name: Compilar TWRP Poco C40
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    
+    steps:
+    - name: Checkout do seu código
+      uses: actions/checkout@v3
+      with:
+        path: device_tree
+
+    - name: Limpar Espaço em Disco
+      run: |
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+        
+    - name: Instalar Dependências
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
+
+    - name: Baixar Código Fonte TWRP (Minimal)
+      run: |
+        mkdir twrp
+        cd twrp
+        repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11
+        repo sync -j$(nproc --all) --force-sync
+
+    - name: Integrar sua Device Tree
+      run: |
+        # Cria o caminho
+        mkdir -p twrp/device/xiaomi/frost
+        # Copia seus arquivos para lá
+        cp -r device_tree/* twrp/device/xiaomi/frost/
+        # Limpa sujeira do git se tiver ido junto
+        rm -rf twrp/device/xiaomi/frost/.git
+
+    - name: Compilar
+      run: |
+        cd twrp
+        export ALLOW_MISSING_DEPENDENCIES=true
+        . build/envsetup.sh
+        lunch twrp_frost-eng
+        mka vendorbootimage
+      
+    - name: Upload do Resultado
+      uses: actions/upload-artifact@v4
+      with:
+        name: TWRP-PocoC40-VendorBoot
+        path: twrp/out/target/product/frost/vendor_boot.img
+
