@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Fix Espaço e i386)
+name: Compilar TWRP Poco C40 (Ultra Space Save)
 on:
   workflow_dispatch:
 
@@ -12,43 +12,29 @@ jobs:
       with:
         path: device_tree
 
-    - name: 🗑️ LIMPEZA NUCLEAR (Liberação de ~35GB)
+    - name: 🧹 Limpeza Profunda de Disco (35GB+ Livres)
       run: |
-        echo "Espaço antes:" && df -h
-        sudo rm -rf /usr/local/lib/android # SDK Android padrão (GIGANTE)
-        sudo rm -rf /usr/share/dotnet # .NET
-        sudo rm -rf /opt/ghc # Haskell
-        sudo rm -rf /usr/local/share/boost # Bibliotecas Boost
-        sudo rm -rf /opt/hostedtoolcache/CodeQL # Cache de código
-        sudo rm -rf /usr/local/share/powershell # PowerShell
-        sudo rm -rf /usr/local/bin/aliyun # Aliyun CLI
-        sudo rm -rf /usr/local/bin/az # Azure CLI
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /opt/hostedtoolcache
         sudo docker image prune --all --force
         sudo apt-get clean
-        echo "Espaço depois:" && df -h
+        df -h
 
-    - name: 🛠️ Instalar Dependências (Com Fix i386)
+    - name: 🛠️ Instalar Dependências
       run: |
-        # Evita prompts interativos que travam o build
         export DEBIAN_FRONTEND=noninteractive
-        
-        # Adiciona arquitetura 32-bit (Resolve o erro que você teve)
         sudo dpkg --add-architecture i386
         sudo apt-get update
-        
-        # Remove o serviço que fica perguntando sobre reiniciar serviços
-        sudo apt-get remove -y needrestart
-        
-        # Instala tudo o que o Android 11 exige
         sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev \
         gcc-multilib g++-multilib libc6-dev-i386 x11proto-core-dev libx11-dev \
         lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig \
         python2 python3 rsync libncurses5:i386 libncurses5
-        
-        # Ajuste para o Python 2 (Obrigatório para o comando 'repo' no Android 11)
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: 🚀 Configurar Repo e Sincronizar (Modo Ultra Leve)
+    - name: 🚀 Sincronização e Autodestruição de Cache (.repo)
       run: |
         git config --global user.name "Action Builder"
         git config --global user.email "action@github.com"
@@ -60,18 +46,22 @@ jobs:
         
         mkdir twrp && cd twrp
         
-        # depth=1 e single-branch para economizar o máximo de disco possível
+        # Sincronização mínima (depth 1)
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        
+        # --- O TRUQUE DE MESTRE ---
+        # Deletamos a pasta .repo (metadados) para ganhar ~12GB extras para o build
+        echo "Espaço antes de deletar .repo:" && df -h
+        rm -rf .repo
+        echo "Espaço após deletar .repo (Essencial para o build):" && df -h
 
     - name: 📂 Integrar Device Tree
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
-        # Remove a pasta .git interna para não bugar o build
-        rm -rf twrp/device/xiaomi/frost/.git
 
-    - name: 🏗️ Compilar TWRP (Vendor Boot)
+    - name: 🏗️ Compilar (Apenas Vendor Boot)
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
@@ -80,11 +70,11 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Compilando apenas o necessário para o Poco C40
+        # Compilação focada para economizar recursos
         mka vendorbootimage
       
     - name: 📤 Upload do Resultado
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-PocoC40-VendorBoot
+        name: TWRP-PocoC40-Final
         path: twrp/out/target/product/frost/vendor_boot.img
