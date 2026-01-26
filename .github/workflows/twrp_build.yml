@@ -1,15 +1,11 @@
-name: Compilar TWRP Poco C40 (Docker)
+name: Compilar TWRP Poco C40 (Ubuntu 22.04 Otimizado)
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    # Usa o servidor mais novo do GitHub (rápido)
-    runs-on: ubuntu-latest
-    
-    # MAS... roda tudo dentro deste container (Ambiente Controlado)
-    container:
-      image: ubuntu:20.04
+    # Usamos o servidor mais estável e suportado atualmente
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout do Código
@@ -17,32 +13,55 @@ jobs:
       with:
         path: device_tree
 
-    - name: Preparar Ambiente (Dentro do Docker)
+    - name: 🗑️ LIMPEZA DE DISCO (Essencial)
       run: |
-        # Atualiza os repositórios do container antigo
-        apt-get update
+        # Libera cerca de 25GB de espaço
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        sudo docker image prune --all --force
+        sudo rm -rf /usr/local/lib/android
+        sudo apt-get clean
+
+    - name: Instalar Dependências (Correção para Ubuntu 22.04)
+      run: |
+        sudo apt-get update
         
-        # Instala dependências críticas sem interação (DEBIAN_FRONTEND=noninteractive)
-        DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        git-core gnupg flex bison build-essential zip curl zlib1g-dev \
-        gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
-        x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev \
-        libxml2-utils xsltproc unzip fontconfig python python3 rsync sudo
+        # Instala ferramentas básicas
+        sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev \
+        gcc-multilib g++-multilib libc6-dev-i386 x11proto-core-dev libx11-dev \
+        lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
 
-        # Configura git para não reclamar de rodar como root
-        git config --global --add safe.directory '*'
+        # TRUQUE: Instalar libncurses5 no Ubuntu 22.04 (Necessário para Android 11)
+        sudo apt-get install -y libncurses5 libncurses5-dev libncurses5:i386
 
-    - name: Baixar e Sincronizar TWRP
+        # TRUQUE: Instalar Python 2 (O Android 11 ainda usa scripts antigos)
+        sudo apt-get install -y python2
+        # Cria um link para que o comando 'python' funcione
+        sudo ln -sf /usr/bin/python2 /usr/bin/python
+
+    - name: Configurar Git e Repo
+      run: |
+        git config --global user.name "Action Builder"
+        git config --global user.email "action@github.com"
+        
+        mkdir -p ~/bin
+        # Baixa o repo oficial
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        echo "$HOME/bin" >> $GITHUB_PATH
+
+    - name: Baixar Código TWRP (Modo Super Leve)
       run: |
         mkdir twrp
         cd twrp
-        # Configura o repo (necessário no docker)
-        curl https://storage.googleapis.com/git-repo-downloads/repo > /usr/bin/repo
-        chmod a+x /usr/bin/repo
         
-        # Inicializa e Sincroniza
+        # Inicializa apenas o branch necessário
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
-        repo sync -j$(nproc --all) --force-sync
+        
+        # Sincroniza sem histórico, sem tags e apenas o necessário (Economiza ~20GB)
+        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Integrar Device Tree
       run: |
@@ -50,17 +69,22 @@ jobs:
         cp -r device_tree/* twrp/device/xiaomi/frost/
         rm -rf twrp/device/xiaomi/frost/.git
 
-    - name: Compilar
+    - name: Compilar (Vendor Boot)
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
-        export USER=$(whoami)
+        
+        # Carrega as configurações
         . build/envsetup.sh
+        
+        # Seleciona o dispositivo
         lunch twrp_frost-eng
+        
+        # Compila APENAS o vendor_boot (o resto não cabe/não precisa)
         mka vendorbootimage
       
-    - name: Upload do Vendor Boot
+    - name: Upload do Resultado
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-PocoC40-DockerBuild
+        name: TWRP-PocoC40-Final
         path: twrp/out/target/product/frost/vendor_boot.img
