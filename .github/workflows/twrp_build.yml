@@ -60,6 +60,9 @@ jobs:
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
+        rm -rf twrp/frameworks/base/ tests/OverlayHostTests
+        rm -rf twrp/tools/test/graphicsbenchmark
+
 
     - name: 🏗️ Compilar (Apenas Vendor Boot)
       run: |
