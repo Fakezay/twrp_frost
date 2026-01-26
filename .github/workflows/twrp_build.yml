@@ -1,90 +1,90 @@
-name: Compilar TWRP Poco C40 (Ubuntu 22.04 Otimizado)
+name: Compilar TWRP Poco C40 (Fix Espaço e i386)
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    # Usamos o servidor mais estável e suportado atualmente
     runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout do Código
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: device_tree
 
-    - name: 🗑️ LIMPEZA DE DISCO (Essencial)
+    - name: 🗑️ LIMPEZA NUCLEAR (Liberação de ~35GB)
       run: |
-        # Libera cerca de 25GB de espaço
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf "/usr/local/share/boost"
-        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        echo "Espaço antes:" && df -h
+        sudo rm -rf /usr/local/lib/android # SDK Android padrão (GIGANTE)
+        sudo rm -rf /usr/share/dotnet # .NET
+        sudo rm -rf /opt/ghc # Haskell
+        sudo rm -rf /usr/local/share/boost # Bibliotecas Boost
+        sudo rm -rf /opt/hostedtoolcache/CodeQL # Cache de código
+        sudo rm -rf /usr/local/share/powershell # PowerShell
+        sudo rm -rf /usr/local/bin/aliyun # Aliyun CLI
+        sudo rm -rf /usr/local/bin/az # Azure CLI
         sudo docker image prune --all --force
-        sudo rm -rf /usr/local/lib/android
         sudo apt-get clean
+        echo "Espaço depois:" && df -h
 
-    - name: Instalar Dependências (Correção para Ubuntu 22.04)
+    - name: 🛠️ Instalar Dependências (Com Fix i386)
       run: |
+        # Evita prompts interativos que travam o build
+        export DEBIAN_FRONTEND=noninteractive
+        
+        # Adiciona arquitetura 32-bit (Resolve o erro que você teve)
+        sudo dpkg --add-architecture i386
         sudo apt-get update
         
-        # Instala ferramentas básicas
+        # Remove o serviço que fica perguntando sobre reiniciar serviços
+        sudo apt-get remove -y needrestart
+        
+        # Instala tudo o que o Android 11 exige
         sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev \
         gcc-multilib g++-multilib libc6-dev-i386 x11proto-core-dev libx11-dev \
-        lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
-
-        # TRUQUE: Instalar libncurses5 no Ubuntu 22.04 (Necessário para Android 11)
-        sudo apt-get install -y libncurses5 libncurses5-dev libncurses5:i386
-
-        # TRUQUE: Instalar Python 2 (O Android 11 ainda usa scripts antigos)
-        sudo apt-get install -y python2
-        # Cria um link para que o comando 'python' funcione
+        lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig \
+        python2 python3 rsync libncurses5:i386 libncurses5
+        
+        # Ajuste para o Python 2 (Obrigatório para o comando 'repo' no Android 11)
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: Configurar Git e Repo
+    - name: 🚀 Configurar Repo e Sincronizar (Modo Ultra Leve)
       run: |
         git config --global user.name "Action Builder"
         git config --global user.email "action@github.com"
         
         mkdir -p ~/bin
-        # Baixa o repo oficial
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
-        echo "$HOME/bin" >> $GITHUB_PATH
-
-    - name: Baixar Código TWRP (Modo Super Leve)
-      run: |
-        mkdir twrp
-        cd twrp
+        export PATH="$HOME/bin:$PATH"
         
-        # Inicializa apenas o branch necessário
+        mkdir twrp && cd twrp
+        
+        # depth=1 e single-branch para economizar o máximo de disco possível
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
-        
-        # Sincroniza sem histórico, sem tags e apenas o necessário (Economiza ~20GB)
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
-    - name: Integrar Device Tree
+    - name: 📂 Integrar Device Tree
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
+        # Remove a pasta .git interna para não bugar o build
         rm -rf twrp/device/xiaomi/frost/.git
 
-    - name: Compilar (Vendor Boot)
+    - name: 🏗️ Compilar TWRP (Vendor Boot)
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
+        export PATH="$HOME/bin:$PATH"
         
-        # Carrega as configurações
         . build/envsetup.sh
-        
-        # Seleciona o dispositivo
         lunch twrp_frost-eng
         
-        # Compila APENAS o vendor_boot (o resto não cabe/não precisa)
+        # Compilando apenas o necessário para o Poco C40
         mka vendorbootimage
       
-    - name: Upload do Resultado
+    - name: 📤 Upload do Resultado
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-PocoC40-Final
+        name: TWRP-PocoC40-VendorBoot
         path: twrp/out/target/product/frost/vendor_boot.img
