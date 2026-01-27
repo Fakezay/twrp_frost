@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Fix Panic Perl)
+name: Compilar TWRP Poco C40 (Python Fix)
 on:
   workflow_dispatch:
 
@@ -49,30 +49,82 @@ jobs:
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
+        # Deleta metadados para liberar espaço
         rm -rf .repo
 
-    - name: 📂 Integrar Device Tree e HACKS (Modo Perl)
+    - name: 📂 Integrar Device Tree
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
+
+    - name: 🐍 Python Cirúrgico (Remover Módulos Quebrados)
+      run: |
+        # Criamos um script Python na hora para editar o Android.bp com inteligência
+        cat <<EOF > remove_docs.py
+        import sys
+        import re
+
+        # O arquivo vilão
+        file_path = "twrp/frameworks/base/Android.bp"
+
+        try:
+            with open(file_path, "r") as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            print("Arquivo Android.bp não encontrado, pulando...")
+            sys.exit(0)
+
+        new_lines = []
+        brace_balance = 0
+        in_block = False
+        current_block = []
+
+        print(f"Analisando {file_path}...")
+
+        for line in lines:
+            stripped = line.strip()
+            
+            # Detecta o início de um módulo 'droiddoc'
+            if re.match(r'^\s*droiddoc\s*\{', line) and not in_block:
+                in_block = True
+                brace_balance = 1
+                current_block = [line]
+                continue
+            
+            if in_block:
+                current_block.append(line)
+                # Conta chaves para achar o final do bloco
+                brace_balance += line.count('{')
+                brace_balance -= line.count('}')
+                
+                if brace_balance == 0:
+                    # O bloco fechou. Vamos ver se é um dos proibidos.
+                    block_content = "".join(current_block)
+                    if 'name: "offline-sdk-docs"' in block_content or 'name: "ds-docs-switched"' in block_content:
+                        print("!!! ALVO ELIMINADO: Módulo de documentação removido !!!")
+                        # Não salvamos este bloco em new_lines (ele é deletado)
+                    else:
+                        # Se não for o vilão, salvamos ele de volta
+                        new_lines.extend(current_block)
+                    
+                    in_block = False
+                    current_block = []
+            else:
+                # Linhas fora de blocos droiddoc são mantidas
+                new_lines.append(line)
+
+        with open(file_path, "w") as f:
+            f.write("".join(new_lines))
+        print("Cirurgia concluída.")
+        EOF
+
+        # Executa o script
+        python3 remove_docs.py
         
-        # Remoção de pastas problemáticas
+        # Limpeza extra de pastas
         rm -rf twrp/frameworks/base/tests/OverlayHostTests
         rm -rf twrp/tools/test/graphicsbenchmark
         rm -rf twrp/tools/platform-compat
-        
-        # --- A CORREÇÃO REAL ---
-        cd twrp
-        echo "Procurando e destruindo definições de docs..."
-        
-        # Usa Perl para deletar blocos 'droiddoc { ... }' inteiros que contenham 'offline-sdk-docs'
-        # Isso funciona mesmo se o bloco tiver 50 linhas.
-        find frameworks/base -name "Android.bp" -exec perl -0777 -i -pe 's/droiddoc\s*\{[^}]*name:\s*"offline-sdk-docs".*?\}//gs' {} +
-        
-        # Faz o mesmo para o 'ds-docs-switched' que também trava
-        find frameworks/base -name "Android.bp" -exec perl -0777 -i -pe 's/droiddoc\s*\{[^}]*name:\s*"ds-docs-switched".*?\}//gs' {} +
-        
-        echo "Definições de documentação removidas com sucesso."
 
     - name: 🏗️ Compilar (Bootimage)
       run: |
@@ -83,7 +135,7 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Usamos bootimage para forçar a criação de tudo
+        # Força criação de todos os binários
         mka bootimage
       
     - name: 📤 Upload do Resultado
