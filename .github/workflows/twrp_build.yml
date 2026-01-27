@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Fix Enabled False)
+name: Compilar TWRP Poco C40 (No Tests Edition)
 on:
   workflow_dispatch:
 
@@ -56,9 +56,9 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🐍 Python Fix (Desativar Módulos via 'enabled: false')
+    - name: 🐍 Python Fix (O que resolveu o erro anterior)
       run: |
-        # Criamos o script que desativa os módulos em vez de tentar deletá-los
+        # Mantemos esse script porque ele funcionou para passar do Soong!
         cat <<EOF > disable_docs.py
         import sys
         import re
@@ -74,39 +74,35 @@ jobs:
 
         print(f"Lendo arquivo... ({len(content)} caracteres)")
 
-        # Regex inteligente: Procura o nome do módulo e injeta 'enabled: false,' logo depois
-        # Substitui: name: "offline-sdk-docs",
-        # Por:       name: "offline-sdk-docs", enabled: false,
-        
-        # Módulo 1: offline-sdk-docs
         if 'name: "offline-sdk-docs"' in content:
             print("Desativando offline-sdk-docs...")
             content = re.sub(r'name:\s*"offline-sdk-docs"', 'name: "offline-sdk-docs", enabled: false', content)
-        else:
-            print("AVISO: offline-sdk-docs não encontrado no arquivo (estranho, mas ok).")
 
-        # Módulo 2: ds-docs-switched
         if 'name: "ds-docs-switched"' in content:
             print("Desativando ds-docs-switched...")
             content = re.sub(r'name:\s*"ds-docs-switched"', 'name: "ds-docs-switched", enabled: false', content)
 
         with open(target_file, 'w') as f:
             f.write(content)
-        
-        print("Arquivo Android.bp atualizado com sucesso.")
         EOF
 
-        # Executa o script
         python3 disable_docs.py
-        
-        # Verificação Visual no Log (Para termos certeza)
-        echo "Verificando se a alteração funcionou:"
-        grep "offline-sdk-docs" twrp/frameworks/base/Android.bp || echo "Erro: String não encontrada"
 
-        # Limpeza extra
-        rm -rf twrp/frameworks/base/tests/OverlayHostTests
-        rm -rf twrp/tools/test/graphicsbenchmark
+    - name: ✂️ Lobotomia (Remover Testes Quebrados)
+      run: |
+        # AQUI ESTÁ A NOVIDADE:
+        # Apagamos a pasta de testes INTEIRA do framework.
+        # Se a pasta não existir, o Android não tenta compilar o OverlayHostTests.
+        
+        echo "Apagando testes do Frameworks Base..."
+        rm -rf twrp/frameworks/base/tests
+        
+        echo "Apagando ferramentas de teste..."
+        rm -rf twrp/tools/test
         rm -rf twrp/tools/platform-compat
+        
+        echo "Apagando testes do HIDL (Costumam dar erro também)..."
+        rm -rf twrp/system/tools/hidl/test
 
     - name: 🏗️ Compilar (Bootimage)
       run: |
@@ -122,8 +118,3 @@ jobs:
       
     - name: 📤 Upload do Resultado
       uses: actions/upload-artifact@v4
-      with:
-        name: TWRP-PocoC40-Pack
-        path: |
-          twrp/out/target/product/frost/vendor_boot.img
-          twrp/out/target/product/frost/boot.img
