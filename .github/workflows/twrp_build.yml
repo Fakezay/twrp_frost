@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Regex Kill Fix)
+name: Compilar TWRP Poco C40 (Terra Arrasada)
 on:
   workflow_dispatch:
 
@@ -46,7 +46,7 @@ jobs:
         
         mkdir twrp && cd twrp
         
-        # Mantemos o depth=1 para economizar espaço
+        # Mantemos depth=1. Sem isso, o disco estoura.
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
@@ -57,41 +57,38 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🔪 Neutralização Verificada (Mata o Erro na Raiz)
+    - name: ☢️ EXTERMÍNIO DE MÓDULOS (Search & Destroy)
       run: |
-        TARGET_FILE="twrp/frameworks/base/Android.bp"
+        echo "=== INICIANDO VARREDURA GLOBAL ==="
+        cd twrp/frameworks/base
         
-        echo "=== DIAGNÓSTICO INICIAL ==="
-        if [ -f "$TARGET_FILE" ]; then
-            echo "Arquivo encontrado: $TARGET_FILE"
-        else
-            echo "ERRO FATAL: Arquivo Android.bp não existe!"
-            exit 1
-        fi
+        # PROVA DE VIDA: Mostra onde o módulo está antes de matá-lo
+        echo "Localizando o inimigo:"
+        grep -r "offline-sdk-docs" . || echo "Estranho... não achei com grep simples."
         
-        # Mostra a linha problemática ANTES da cirurgia (para provar que ela existe)
-        echo "Procurando o vilão..."
-        grep "offline-sdk-docs" "$TARGET_FILE" || echo "AVISO: String não encontrada antes da edição."
-
-        echo "=== EXECUTANDO CIRURGIA COM REGEX ==="
-        # O comando sed abaixo usa regex para substituir 'name: "offline-sdk-docs"' 
-        # ignorando espaços ou tabs que possam existir entre 'name' e o valor.
-        sed -i 's/name\s*:\s*"offline-sdk-docs"/name: "offline-sdk-docs-DISABLED"/g' "$TARGET_FILE"
-        sed -i 's/name\s*:\s*"ds-docs-switched"/name: "ds-docs-switched-DISABLED"/g' "$TARGET_FILE"
-        sed -i 's/name\s*:\s*"ds-docs-java"/name: "ds-docs-java-DISABLED"/g' "$TARGET_FILE"
-
-        echo "=== VERIFICAÇÃO PÓS-CIRURGIA ==="
-        # Se o grep ainda encontrar o nome original, significa que falhou. Travamos o build aqui.
-        if grep -q 'name: "offline-sdk-docs"' "$TARGET_FILE"; then
-            echo "❌ ERRO CRÍTICO: A substituição FALHOU. O módulo ainda existe."
-            # Mostra o trecho do arquivo para entendermos o porquê
-            grep -C 5 "offline-sdk-docs" "$TARGET_FILE"
+        # O COMANDO NUCLEAR:
+        # Encontra QUALQUER arquivo que contenha o nome do módulo e substitui a string bruta.
+        # Não importa se é definição (name:) ou uso (libs:), quebramos tudo igual.
+        # Isso força o erro "Missing Dependency", que o ALLOW_MISSING_DEPENDENCIES vai ignorar.
+        
+        find . -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs-KILLED"/g' {} +
+        find . -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched-KILLED"/g' {} +
+        find . -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java-KILLED"/g' {} +
+        
+        echo "=== VERIFICAÇÃO PÓS-MORTEM ==="
+        # Se isso retornar algum resultado, falhamos.
+        if grep -r "offline-sdk-docs\"" .; then
+            echo "❌ FALHA CRÍTICA: O módulo sobreviveu. Abortando para não perder tempo."
+            grep -r "offline-sdk-docs\"" .
             exit 1
         else
-            echo "✅ SUCESSO: O módulo 'offline-sdk-docs' foi renomeado e neutralizado."
+            echo "✅ SUCESSO: O módulo foi exterminado de todos os arquivos .bp"
         fi
-
-        # Limpeza extra das pastas de teste (para evitar o erro OverlayHostTests)
+        
+        # Volta para a raiz
+        cd ../..
+        
+        # Limpeza preventiva dos testes (evita o erro OverlayHostTests)
         rm -rf twrp/frameworks/base/tests
         rm -rf twrp/tools/test
         rm -rf twrp/tools/platform-compat
@@ -106,7 +103,7 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Compilação completa
+        # Mka bootimage
         mka bootimage
       
     - name: 📤 Upload do Resultado
