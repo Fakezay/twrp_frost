@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (No Tests Edition)
+name: Compilar TWRP Poco C40 (Renamer Fix)
 on:
   workflow_dispatch:
 
@@ -56,52 +56,45 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🐍 Python Fix (O que resolveu o erro anterior)
+    - name: 🧪 Neutralizar Erros (Renomear Docs e Apagar Testes)
       run: |
-        # Mantemos esse script porque ele funcionou para passar do Soong!
-        cat <<EOF > disable_docs.py
+        # Parte 1: O Script Python que RENOMEIA os módulos problemáticos
+        # Isso engana o compilador. Ele não vai achar o módulo e vai pular (graças ao ALLOW_MISSING).
+        cat <<EOF > neutralize_errors.py
         import sys
-        import re
 
         target_file = "twrp/frameworks/base/Android.bp"
-        
+
         try:
             with open(target_file, 'r') as f:
                 content = f.read()
         except FileNotFoundError:
-            print(f"ERRO CRÍTICO: {target_file} não encontrado!")
+            print(f"ERRO: Arquivo {target_file} não encontrado!")
             sys.exit(1)
 
-        print(f"Lendo arquivo... ({len(content)} caracteres)")
-
-        if 'name: "offline-sdk-docs"' in content:
-            print("Desativando offline-sdk-docs...")
-            content = re.sub(r'name:\s*"offline-sdk-docs"', 'name: "offline-sdk-docs", enabled: false', content)
-
-        if 'name: "ds-docs-switched"' in content:
-            print("Desativando ds-docs-switched...")
-            content = re.sub(r'name:\s*"ds-docs-switched"', 'name: "ds-docs-switched", enabled: false', content)
+        print("Neutralizando módulos de documentação...")
+        
+        # Substituição bruta de texto (String Replace simples, sem regex para não falhar)
+        # Trocamos o nome para algo que o Android não conheça.
+        new_content = content.replace('name: "offline-sdk-docs"', 'name: "offline-sdk-docs-LIXO"')
+        new_content = new_content.replace('name: "ds-docs-switched"', 'name: "ds-docs-switched-LIXO"')
+        new_content = new_content.replace('name: "ds-docs-java"', 'name: "ds-docs-java-LIXO"')
 
         with open(target_file, 'w') as f:
-            f.write(content)
+            f.write(new_content)
+        
+        print("Módulos renomeados com sucesso!")
         EOF
 
-        python3 disable_docs.py
-
-    - name: ✂️ Lobotomia (Remover Testes Quebrados)
-      run: |
-        # AQUI ESTÁ A NOVIDADE:
-        # Apagamos a pasta de testes INTEIRA do framework.
-        # Se a pasta não existir, o Android não tenta compilar o OverlayHostTests.
+        # Executa a neutralização
+        python3 neutralize_errors.py
         
-        echo "Apagando testes do Frameworks Base..."
+        # Parte 2: Apagar a pasta de testes para evitar o erro do CKATI (OverlayHostTests)
+        # Apagamos a pasta mãe 'tests' inteira.
+        echo "Apagando testes do sistema..."
         rm -rf twrp/frameworks/base/tests
-        
-        echo "Apagando ferramentas de teste..."
         rm -rf twrp/tools/test
         rm -rf twrp/tools/platform-compat
-        
-        echo "Apagando testes do HIDL (Costumam dar erro também)..."
         rm -rf twrp/system/tools/hidl/test
 
     - name: 🏗️ Compilar (Bootimage)
@@ -113,8 +106,13 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Build completo
+        # Mka bootimage força a criação do kernel/ramdisk
         mka bootimage
       
     - name: 📤 Upload do Resultado
       uses: actions/upload-artifact@v4
+      with:
+        name: TWRP-PocoC40-Pack
+        path: |
+          twrp/out/target/product/frost/vendor_boot.img
+          twrp/out/target/product/frost/boot.img
