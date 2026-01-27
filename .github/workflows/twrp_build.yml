@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Ultra Space Save)
+name: Compilar TWRP Poco C40 (Fix Tamanho)
 on:
   workflow_dispatch:
 
@@ -50,21 +50,20 @@ jobs:
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
-        # --- O TRUQUE DE MESTRE ---
-        # Deletamos a pasta .repo (metadados) para ganhar ~12GB extras para o build
-        echo "Espaço antes de deletar .repo:" && df -h
+        # Deletamos a pasta .repo para liberar espaço para o build
         rm -rf .repo
-        echo "Espaço após deletar .repo (Essencial para o build):" && df -h
 
     - name: 📂 Integrar Device Tree
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
-        rm -rf twrp/frameworks/base/ tests/OverlayHostTests
+        
+        # CORREÇÃO IMPORTANTE: Havia um espaço extra no seu comando anterior
+        # que poderia causar erro. Aqui está a forma segura:
+        rm -rf twrp/frameworks/base/tests/OverlayHostTests
         rm -rf twrp/tools/test/graphicsbenchmark
 
-
-    - name: 🏗️ Compilar (Apenas Vendor Boot)
+    - name: 🏗️ Compilar (Bootimage Completa)
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
@@ -73,11 +72,14 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Compilação focada para economizar recursos
-        mka vendorbootimage
+        # MUDANÇA: 'bootimage' força a criação do Ramdisk do TWRP real.
+        # Ele vai gerar boot.img E vendor_boot.img corretamente.
+        mka bootimage
       
     - name: 📤 Upload do Resultado
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-PocoC40-Final
-        path: twrp/out/target/product/frost/vendor_boot.img
+        name: TWRP-PocoC40-Pack
+        path: |
+          twrp/out/target/product/frost/vendor_boot.img
+          twrp/out/target/product/frost/boot.img
