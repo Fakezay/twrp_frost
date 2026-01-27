@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Python Fix)
+name: Compilar TWRP Poco C40 (Python Destroyer)
 on:
   workflow_dispatch:
 
@@ -49,7 +49,7 @@ jobs:
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
-        # Deleta metadados para liberar espaço
+        # Deleta metadados imediatamente
         rm -rf .repo
 
     - name: 📂 Integrar Device Tree
@@ -57,71 +57,80 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🐍 Python Cirúrgico (Remover Módulos Quebrados)
+    - name: 🐍 Python Destruidor de Docs (Modo Robusto)
       run: |
-        # Criamos um script Python na hora para editar o Android.bp com inteligência
-        cat <<EOF > remove_docs.py
+        # Cria o script Python na hora
+        cat <<EOF > remove_docs_robust.py
         import sys
         import re
 
-        # O arquivo vilão
-        file_path = "twrp/frameworks/base/Android.bp"
+        target_file = "twrp/frameworks/base/Android.bp"
+        # Lista de módulos que causam o erro Panic
+        bad_modules = ['name: "offline-sdk-docs"', 'name: "ds-docs-switched"']
 
         try:
-            with open(file_path, "r") as f:
-                lines = f.readlines()
+            with open(target_file, 'r') as f:
+                content = f.read()
         except FileNotFoundError:
-            print("Arquivo Android.bp não encontrado, pulando...")
-            sys.exit(0)
+            print(f"ERRO CRÍTICO: {target_file} não encontrado!")
+            sys.exit(1)
 
-        new_lines = []
-        brace_balance = 0
-        in_block = False
-        current_block = []
+        print(f"Tamanho original do arquivo: {len(content)} caracteres")
 
-        print(f"Analisando {file_path}...")
-
-        for line in lines:
-            stripped = line.strip()
-            
-            # Detecta o início de um módulo 'droiddoc'
-            if re.match(r'^\s*droiddoc\s*\{', line) and not in_block:
-                in_block = True
-                brace_balance = 1
-                current_block = [line]
-                continue
-            
-            if in_block:
-                current_block.append(line)
-                # Conta chaves para achar o final do bloco
-                brace_balance += line.count('{')
-                brace_balance -= line.count('}')
+        for bad_module in bad_modules:
+            # Loop para garantir que removemos todas as ocorrências
+            while bad_module in content:
+                print(f"Encontrado vilão: {bad_module}")
                 
-                if brace_balance == 0:
-                    # O bloco fechou. Vamos ver se é um dos proibidos.
-                    block_content = "".join(current_block)
-                    if 'name: "offline-sdk-docs"' in block_content or 'name: "ds-docs-switched"' in block_content:
-                        print("!!! ALVO ELIMINADO: Módulo de documentação removido !!!")
-                        # Não salvamos este bloco em new_lines (ele é deletado)
-                    else:
-                        # Se não for o vilão, salvamos ele de volta
-                        new_lines.extend(current_block)
-                    
-                    in_block = False
-                    current_block = []
-            else:
-                # Linhas fora de blocos droiddoc são mantidas
-                new_lines.append(line)
+                # Acha onde o nome está
+                idx_name = content.find(bad_module)
+                
+                # Procura para trás onde o bloco 'droiddoc' começou
+                # (Procura a última ocorrência de 'droiddoc' antes do nome)
+                idx_start_block = content.rfind('droiddoc', 0, idx_name)
+                
+                if idx_start_block == -1:
+                    print("Erro: Nome encontrado mas o bloco 'droiddoc' não. Pulando...")
+                    break
+                
+                # Agora vamos achar a chave de abertura '{'
+                idx_open_brace = content.find('{', idx_start_block)
+                
+                # Agora a parte difícil: Achar a chave de fechamento '}' correspondente
+                brace_count = 1
+                current_idx = idx_open_brace + 1
+                
+                while brace_count > 0 and current_idx < len(content):
+                    if content[current_idx] == '{':
+                        brace_count += 1
+                    elif content[current_idx] == '}':
+                        brace_count -= 1
+                    current_idx += 1
+                
+                idx_end_block = current_idx
+                
+                # Remove o bloco inteiro do conteúdo
+                print(f"Removendo bloco de caracteres {idx_start_block} até {idx_end_block}")
+                content = content[:idx_start_block] + "\n// BLOCO REMOVIDO PELO SCRIPT \n" + content[idx_end_block:]
 
-        with open(file_path, "w") as f:
-            f.write("".join(new_lines))
-        print("Cirurgia concluída.")
+        with open(target_file, 'w') as f:
+            f.write(content)
+        print("Arquivo salvo com sucesso.")
         EOF
 
         # Executa o script
-        python3 remove_docs.py
+        python3 remove_docs_robust.py
         
-        # Limpeza extra de pastas
+        # --- TRAVA DE SEGURANÇA ---
+        # Se o grep achar o nome, falha o build aqui mesmo para não perdermos tempo.
+        if grep -q "offline-sdk-docs" twrp/frameworks/base/Android.bp; then
+            echo "❌ FALHA: O script não conseguiu remover o módulo offline-sdk-docs!"
+            exit 1
+        else
+            echo "✅ SUCESSO: O módulo offline-sdk-docs foi exterminado."
+        fi
+        
+        # Limpeza extra de pastas de teste
         rm -rf twrp/frameworks/base/tests/OverlayHostTests
         rm -rf twrp/tools/test/graphicsbenchmark
         rm -rf twrp/tools/platform-compat
@@ -135,7 +144,7 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Força criação de todos os binários
+        # mka bootimage cria boot.img e vendor_boot.img
         mka bootimage
       
     - name: 📤 Upload do Resultado
