@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Renamer Fix)
+name: Compilar TWRP Poco C40 (Regex Kill Fix)
 on:
   workflow_dispatch:
 
@@ -46,6 +46,7 @@ jobs:
         
         mkdir twrp && cd twrp
         
+        # Mantemos o depth=1 para economizar espaço
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
@@ -56,42 +57,41 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🧪 Neutralizar Erros (Renomear Docs e Apagar Testes)
+    - name: 🔪 Neutralização Verificada (Mata o Erro na Raiz)
       run: |
-        # Parte 1: O Script Python que RENOMEIA os módulos problemáticos
-        # Isso engana o compilador. Ele não vai achar o módulo e vai pular (graças ao ALLOW_MISSING).
-        cat <<EOF > neutralize_errors.py
-        import sys
-
-        target_file = "twrp/frameworks/base/Android.bp"
-
-        try:
-            with open(target_file, 'r') as f:
-                content = f.read()
-        except FileNotFoundError:
-            print(f"ERRO: Arquivo {target_file} não encontrado!")
-            sys.exit(1)
-
-        print("Neutralizando módulos de documentação...")
+        TARGET_FILE="twrp/frameworks/base/Android.bp"
         
-        # Substituição bruta de texto (String Replace simples, sem regex para não falhar)
-        # Trocamos o nome para algo que o Android não conheça.
-        new_content = content.replace('name: "offline-sdk-docs"', 'name: "offline-sdk-docs-LIXO"')
-        new_content = new_content.replace('name: "ds-docs-switched"', 'name: "ds-docs-switched-LIXO"')
-        new_content = new_content.replace('name: "ds-docs-java"', 'name: "ds-docs-java-LIXO"')
-
-        with open(target_file, 'w') as f:
-            f.write(new_content)
+        echo "=== DIAGNÓSTICO INICIAL ==="
+        if [ -f "$TARGET_FILE" ]; then
+            echo "Arquivo encontrado: $TARGET_FILE"
+        else
+            echo "ERRO FATAL: Arquivo Android.bp não existe!"
+            exit 1
+        fi
         
-        print("Módulos renomeados com sucesso!")
-        EOF
+        # Mostra a linha problemática ANTES da cirurgia (para provar que ela existe)
+        echo "Procurando o vilão..."
+        grep "offline-sdk-docs" "$TARGET_FILE" || echo "AVISO: String não encontrada antes da edição."
 
-        # Executa a neutralização
-        python3 neutralize_errors.py
-        
-        # Parte 2: Apagar a pasta de testes para evitar o erro do CKATI (OverlayHostTests)
-        # Apagamos a pasta mãe 'tests' inteira.
-        echo "Apagando testes do sistema..."
+        echo "=== EXECUTANDO CIRURGIA COM REGEX ==="
+        # O comando sed abaixo usa regex para substituir 'name: "offline-sdk-docs"' 
+        # ignorando espaços ou tabs que possam existir entre 'name' e o valor.
+        sed -i 's/name\s*:\s*"offline-sdk-docs"/name: "offline-sdk-docs-DISABLED"/g' "$TARGET_FILE"
+        sed -i 's/name\s*:\s*"ds-docs-switched"/name: "ds-docs-switched-DISABLED"/g' "$TARGET_FILE"
+        sed -i 's/name\s*:\s*"ds-docs-java"/name: "ds-docs-java-DISABLED"/g' "$TARGET_FILE"
+
+        echo "=== VERIFICAÇÃO PÓS-CIRURGIA ==="
+        # Se o grep ainda encontrar o nome original, significa que falhou. Travamos o build aqui.
+        if grep -q 'name: "offline-sdk-docs"' "$TARGET_FILE"; then
+            echo "❌ ERRO CRÍTICO: A substituição FALHOU. O módulo ainda existe."
+            # Mostra o trecho do arquivo para entendermos o porquê
+            grep -C 5 "offline-sdk-docs" "$TARGET_FILE"
+            exit 1
+        else
+            echo "✅ SUCESSO: O módulo 'offline-sdk-docs' foi renomeado e neutralizado."
+        fi
+
+        # Limpeza extra das pastas de teste (para evitar o erro OverlayHostTests)
         rm -rf twrp/frameworks/base/tests
         rm -rf twrp/tools/test
         rm -rf twrp/tools/platform-compat
@@ -106,7 +106,7 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Mka bootimage força a criação do kernel/ramdisk
+        # Compilação completa
         mka bootimage
       
     - name: 📤 Upload do Resultado
