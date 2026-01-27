@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Fix Tamanho)
+name: Compilar TWRP Poco C40 (Fix Final)
 on:
   workflow_dispatch:
 
@@ -12,7 +12,7 @@ jobs:
       with:
         path: device_tree
 
-    - name: 🧹 Limpeza Profunda de Disco (35GB+ Livres)
+    - name: 🧹 Limpeza Profunda de Disco
       run: |
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /usr/share/dotnet
@@ -34,7 +34,7 @@ jobs:
         python2 python3 rsync libncurses5:i386 libncurses5
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: 🚀 Sincronização e Autodestruição de Cache (.repo)
+    - name: 🚀 Sincronização
       run: |
         git config --global user.name "Action Builder"
         git config --global user.email "action@github.com"
@@ -46,24 +46,25 @@ jobs:
         
         mkdir twrp && cd twrp
         
-        # Sincronização mínima (depth 1)
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
-        # Deletamos a pasta .repo para liberar espaço para o build
         rm -rf .repo
 
-    - name: 📂 Integrar Device Tree
+    - name: 📂 Integrar Device Tree e Corrigir Erros
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
         
-        # CORREÇÃO IMPORTANTE: Havia um espaço extra no seu comando anterior
-        # que poderia causar erro. Aqui está a forma segura:
+        # --- AQUI ESTAVA O ERRO ---
+        # Removendo o espaço extra e garantindo a remoção dos testes problemáticos
         rm -rf twrp/frameworks/base/tests/OverlayHostTests
         rm -rf twrp/tools/test/graphicsbenchmark
+        
+        # Removemos também o platform-compat que às vezes reclama
+        rm -rf twrp/tools/platform-compat
 
-    - name: 🏗️ Compilar (Bootimage Completa)
+    - name: 🏗️ Compilar (Bootimage)
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
@@ -72,8 +73,7 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # MUDANÇA: 'bootimage' força a criação do Ramdisk do TWRP real.
-        # Ele vai gerar boot.img E vendor_boot.img corretamente.
+        # Usamos bootimage para garantir que o ramdisk seja gerado
         mka bootimage
       
     - name: 📤 Upload do Resultado
