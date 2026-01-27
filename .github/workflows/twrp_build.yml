@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Fix Final)
+name: Compilar TWRP Poco C40 (Fix Docs Panic)
 on:
   workflow_dispatch:
 
@@ -51,20 +51,25 @@ jobs:
         
         rm -rf .repo
 
-    - name: 📂 Integrar Device Tree e Corrigir Erros
+    - name: 📂 Integrar Device Tree e HACKS
       run: |
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
         
-        # --- AQUI ESTAVA O ERRO ---
-        # Removendo o espaço extra e garantindo a remoção dos testes problemáticos
+        # --- HACK 1: Remover testes quebrados ---
         rm -rf twrp/frameworks/base/tests/OverlayHostTests
         rm -rf twrp/tools/test/graphicsbenchmark
-        
-        # Removemos também o platform-compat que às vezes reclama
         rm -rf twrp/tools/platform-compat
+        
+        # --- HACK 2: CIRURGIA NO ANDROID.BP (Corrige o erro de "Panic") ---
+        # O comando abaixo apaga o bloco que define "offline-sdk-docs" e "ds-docs-switched"
+        # Isso impede que o Soong tente gerar documentação e trave.
+        cd twrp
+        sed -i '/name: "offline-sdk-docs"/,/}/d' frameworks/base/Android.bp
+        sed -i '/name: "ds-docs-switched"/,/}/d' frameworks/base/Android.bp
+        echo "Cirurgia concluída: Módulos de documentação removidos."
 
-    - name: 🏗️ Compilar (Bootimage)
+    - name: 🏗️ Compilar (Forçar Ramdisk)
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
@@ -73,8 +78,10 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Usamos bootimage para garantir que o ramdisk seja gerado
-        mka bootimage
+        # MUDANÇA: Pedimos 'recoveryimage' E 'vendorbootimage'.
+        # 'recoveryimage' obriga o sistema a compilar os binários do TWRP.
+        # 'vendorbootimage' empacota tudo no formato correto do Header v3.
+        mka recoveryimage vendorbootimage
       
     - name: 📤 Upload do Resultado
       uses: actions/upload-artifact@v4
@@ -83,3 +90,4 @@ jobs:
         path: |
           twrp/out/target/product/frost/vendor_boot.img
           twrp/out/target/product/frost/boot.img
+          twrp/out/target/product/frost/recovery.img
