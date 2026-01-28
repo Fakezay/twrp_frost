@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Fix Enabled False)
+name: Compilar TWRP Poco C40 (Kill All Docs)
 on:
   workflow_dispatch:
 
@@ -56,24 +56,26 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🛡️ NEUTRALIZAÇÃO TOTAL (Docs & Testes)
+    - name: 🛡️ NEUTRALIZAÇÃO MASSIVA (Docs & Testes)
       run: |
         cd twrp
         
         echo "=== FASE 1: Desativando Docs (Soong Panic Fix) ==="
-        # AQUI ESTÁ O PULO DO GATO:
-        # Não renomeamos para 'KILLED'. Nós injetamos ', enabled: false' logo após o nome.
-        # Antes: name: "offline-sdk-docs", ...
-        # Depois: name: "offline-sdk-docs", enabled: false, ...
-        # Isso impede que o compilador execute a função que estava dando erro (GenerateBuildActions).
+        # Injetamos ', enabled: false' logo após o nome dos módulos problemáticos.
+        # Isso faz o compilador pular eles.
         
+        # Alvo 1: O anterior
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs", enabled: false/g' {} +
+        
+        # Alvo 2: O NOVO ERRO (ds-docs)
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs"/"ds-docs", enabled: false/g' {} +
+        
+        # Alvo 3: Preventivos (outros que costumam falhar)
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched", enabled: false/g' {} +
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java", enabled: false/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"sdk-docs"/"sdk-docs", enabled: false/g' {} +
         
         echo "=== FASE 2: Apagando Testes (CKATI Error Fix) ==="
-        # Usamos o find para caçar as pastas onde quer que estejam e apagá-las.
-        
         echo "Caçando OverlayHostTests..."
         find . -type d -name "OverlayHostTests" -exec rm -rf {} +
         
@@ -88,11 +90,11 @@ jobs:
         rm -rf system/tools/hidl/test
 
         echo "=== CONFIRMAÇÃO ==="
-        # Vamos verificar se a flag 'enabled: false' foi inserida
-        if grep -r "\"offline-sdk-docs\", enabled: false" frameworks/base; then
-            echo "✅ SUCESSO: Módulo desativado corretamente!"
+        # Verifica se o novo alvo foi atingido
+        if grep -r "\"ds-docs\", enabled: false" frameworks/base; then
+            echo "✅ SUCESSO: 'ds-docs' foi desativado!"
         else
-            echo "⚠️ AVISO: Não consegui confirmar a desativação no grep (mas o sed rodou)."
+            echo "⚠️ AVISO: Não consegui confirmar 'ds-docs' (verifique se o nome no log era exatamente esse)."
         fi
 
     - name: 🏗️ Compilar (Bootimage)
@@ -104,7 +106,6 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # mka bootimage
         mka bootimage
       
     - name: 📤 Upload do Resultado
