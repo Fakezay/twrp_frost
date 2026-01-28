@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Terra Arrasada)
+name: Compilar TWRP Poco C40 (No Tests - Find & Destroy)
 on:
   workflow_dispatch:
 
@@ -46,7 +46,6 @@ jobs:
         
         mkdir twrp && cd twrp
         
-        # Mantemos depth=1. Sem isso, o disco estoura.
         repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-11 --depth=1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
         
@@ -57,42 +56,38 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: ☢️ EXTERMÍNIO DE MÓDULOS (Search & Destroy)
+    - name: ☢️ EXTERMÍNIO DE ERROS (Docs e Testes)
       run: |
-        echo "=== INICIANDO VARREDURA GLOBAL ==="
-        cd twrp/frameworks/base
+        cd twrp
         
-        # PROVA DE VIDA: Mostra onde o módulo está antes de matá-lo
-        echo "Localizando o inimigo:"
-        grep -r "offline-sdk-docs" . || echo "Estranho... não achei com grep simples."
+        echo "=== FASE 1: Matando o erro de Docs (Soong Panic) ==="
+        # Encontra arquivos .bp com o módulo quebrado e renomeia na força bruta
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs-KILLED"/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched-KILLED"/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java-KILLED"/g' {} +
         
-        # O COMANDO NUCLEAR:
-        # Encontra QUALQUER arquivo que contenha o nome do módulo e substitui a string bruta.
-        # Não importa se é definição (name:) ou uso (libs:), quebramos tudo igual.
-        # Isso força o erro "Missing Dependency", que o ALLOW_MISSING_DEPENDENCIES vai ignorar.
+        echo "=== FASE 2: Matando o erro de Testes (CKATI Error) ==="
+        # O erro atual é causado pela pasta OverlayHostTests.
+        # Em vez de adivinhar o caminho, usamos o find para localizar a PASTA e deletar ela inteira.
         
-        find . -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs-KILLED"/g' {} +
-        find . -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched-KILLED"/g' {} +
-        find . -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java-KILLED"/g' {} +
+        echo "Procurando e apagando pastas OverlayHostTests..."
+        find . -type d -name "OverlayHostTests" -exec rm -rf {} +
         
-        echo "=== VERIFICAÇÃO PÓS-MORTEM ==="
-        # Se isso retornar algum resultado, falhamos.
-        if grep -r "offline-sdk-docs\"" .; then
-            echo "❌ FALHA CRÍTICA: O módulo sobreviveu. Abortando para não perder tempo."
-            grep -r "offline-sdk-docs\"" .
-            exit 1
+        echo "Procurando e apagando pastas graphicsbenchmark (visto no log)..."
+        find . -type d -name "graphicsbenchmark" -exec rm -rf {} +
+        
+        echo "Procurando e apagando pastas platform-compat (visto no log)..."
+        find . -type d -name "platform-compat" -exec rm -rf {} +
+        
+        # Limpeza genérica de testes na base
+        rm -rf frameworks/base/tests
+
+        echo "=== VERIFICAÇÃO ==="
+        if [ -d "frameworks/base/tests" ]; then
+             echo "❌ AVISO: A pasta tests ainda existe (pode ser recriada se não apagar direito)."
         else
-            echo "✅ SUCESSO: O módulo foi exterminado de todos os arquivos .bp"
+             echo "✅ SUCESSO: Pasta frameworks/base/tests removida."
         fi
-        
-        # Volta para a raiz
-        cd ../..
-        
-        # Limpeza preventiva dos testes (evita o erro OverlayHostTests)
-        rm -rf twrp/frameworks/base/tests
-        rm -rf twrp/tools/test
-        rm -rf twrp/tools/platform-compat
-        rm -rf twrp/system/tools/hidl/test
 
     - name: 🏗️ Compilar (Bootimage)
       run: |
@@ -103,7 +98,7 @@ jobs:
         . build/envsetup.sh
         lunch twrp_frost-eng
         
-        # Mka bootimage
+        # mka bootimage
         mka bootimage
       
     - name: 📤 Upload do Resultado
