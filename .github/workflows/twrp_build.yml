@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Kill All Docs)
+name: Compilar TWRP Poco C40 (Kill Telephony)
 on:
   workflow_dispatch:
 
@@ -56,26 +56,27 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🛡️ NEUTRALIZAÇÃO MASSIVA (Docs & Testes)
+    - name: 🛡️ NEUTRALIZAÇÃO MASSIVA (Docs, Testes & Telefonia)
       run: |
         cd twrp
         
         echo "=== FASE 1: Desativando Docs (Soong Panic Fix) ==="
-        # Injetamos ', enabled: false' logo após o nome dos módulos problemáticos.
-        # Isso faz o compilador pular eles.
-        
-        # Alvo 1: O anterior
+        # Docs que já matamos antes
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs", enabled: false/g' {} +
-        
-        # Alvo 2: O NOVO ERRO (ds-docs)
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs"/"ds-docs", enabled: false/g' {} +
-        
-        # Alvo 3: Preventivos (outros que costumam falhar)
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched", enabled: false/g' {} +
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java", enabled: false/g' {} +
         find frameworks/base -type f -name "*.bp" -exec sed -i 's/"sdk-docs"/"sdk-docs", enabled: false/g' {} +
+
+        echo "=== FASE 2: Desativando Telefonia (Novo Erro) ==="
+        # Este é o culpado de agora. Vamos desativá-lo.
+        # Procuramos em toda a pasta frameworks, pois pode estar em base ou opt/telephony
+        find frameworks -type f -name "*.bp" -exec sed -i 's/"framework-telephony"/"framework-telephony", enabled: false/g' {} +
         
-        echo "=== FASE 2: Apagando Testes (CKATI Error Fix) ==="
+        # Preventivo: Desativar também o telephony-common se ele aparecer
+        find frameworks -type f -name "*.bp" -exec sed -i 's/"telephony-common"/"telephony-common", enabled: false/g' {} +
+        
+        echo "=== FASE 3: Apagando Testes (CKATI Error Fix) ==="
         echo "Caçando OverlayHostTests..."
         find . -type d -name "OverlayHostTests" -exec rm -rf {} +
         
@@ -85,16 +86,15 @@ jobs:
         echo "Caçando platform-compat..."
         find . -type d -name "platform-compat" -exec rm -rf {} +
         
-        # Limpeza preventiva extra
+        # Limpeza genérica
         rm -rf frameworks/base/tests
         rm -rf system/tools/hidl/test
 
         echo "=== CONFIRMAÇÃO ==="
-        # Verifica se o novo alvo foi atingido
-        if grep -r "\"ds-docs\", enabled: false" frameworks/base; then
-            echo "✅ SUCESSO: 'ds-docs' foi desativado!"
+        if grep -r "\"framework-telephony\", enabled: false" frameworks; then
+            echo "✅ SUCESSO: 'framework-telephony' desativado!"
         else
-            echo "⚠️ AVISO: Não consegui confirmar 'ds-docs' (verifique se o nome no log era exatamente esse)."
+            echo "⚠️ AVISO: Não achei 'framework-telephony' para desativar (talvez o nome seja diferente, mas o sed rodou)."
         fi
 
     - name: 🏗️ Compilar (Bootimage)
