@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (No Tests - Find & Destroy)
+name: Compilar TWRP Poco C40 (Fix Enabled False)
 on:
   workflow_dispatch:
 
@@ -56,37 +56,43 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: ☢️ EXTERMÍNIO DE ERROS (Docs e Testes)
+    - name: 🛡️ NEUTRALIZAÇÃO TOTAL (Docs & Testes)
       run: |
         cd twrp
         
-        echo "=== FASE 1: Matando o erro de Docs (Soong Panic) ==="
-        # Encontra arquivos .bp com o módulo quebrado e renomeia na força bruta
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs-KILLED"/g' {} +
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched-KILLED"/g' {} +
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java-KILLED"/g' {} +
+        echo "=== FASE 1: Desativando Docs (Soong Panic Fix) ==="
+        # AQUI ESTÁ O PULO DO GATO:
+        # Não renomeamos para 'KILLED'. Nós injetamos ', enabled: false' logo após o nome.
+        # Antes: name: "offline-sdk-docs", ...
+        # Depois: name: "offline-sdk-docs", enabled: false, ...
+        # Isso impede que o compilador execute a função que estava dando erro (GenerateBuildActions).
         
-        echo "=== FASE 2: Matando o erro de Testes (CKATI Error) ==="
-        # O erro atual é causado pela pasta OverlayHostTests.
-        # Em vez de adivinhar o caminho, usamos o find para localizar a PASTA e deletar ela inteira.
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs", enabled: false/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched", enabled: false/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java", enabled: false/g' {} +
         
-        echo "Procurando e apagando pastas OverlayHostTests..."
+        echo "=== FASE 2: Apagando Testes (CKATI Error Fix) ==="
+        # Usamos o find para caçar as pastas onde quer que estejam e apagá-las.
+        
+        echo "Caçando OverlayHostTests..."
         find . -type d -name "OverlayHostTests" -exec rm -rf {} +
         
-        echo "Procurando e apagando pastas graphicsbenchmark (visto no log)..."
+        echo "Caçando graphicsbenchmark..."
         find . -type d -name "graphicsbenchmark" -exec rm -rf {} +
         
-        echo "Procurando e apagando pastas platform-compat (visto no log)..."
+        echo "Caçando platform-compat..."
         find . -type d -name "platform-compat" -exec rm -rf {} +
         
-        # Limpeza genérica de testes na base
+        # Limpeza preventiva extra
         rm -rf frameworks/base/tests
+        rm -rf system/tools/hidl/test
 
-        echo "=== VERIFICAÇÃO ==="
-        if [ -d "frameworks/base/tests" ]; then
-             echo "❌ AVISO: A pasta tests ainda existe (pode ser recriada se não apagar direito)."
+        echo "=== CONFIRMAÇÃO ==="
+        # Vamos verificar se a flag 'enabled: false' foi inserida
+        if grep -r "\"offline-sdk-docs\", enabled: false" frameworks/base; then
+            echo "✅ SUCESSO: Módulo desativado corretamente!"
         else
-             echo "✅ SUCESSO: Pasta frameworks/base/tests removida."
+            echo "⚠️ AVISO: Não consegui confirmar a desativação no grep (mas o sed rodou)."
         fi
 
     - name: 🏗️ Compilar (Bootimage)
