@@ -1,4 +1,4 @@
-name: Compilar TWRP Poco C40 (Kill Telephony)
+name: Compilar TWRP Poco C40 (Delete & Rename Fix)
 on:
   workflow_dispatch:
 
@@ -56,45 +56,56 @@ jobs:
         mkdir -p twrp/device/xiaomi/frost
         cp -r device_tree/* twrp/device/xiaomi/frost/
 
-    - name: 🛡️ NEUTRALIZAÇÃO MASSIVA (Docs, Testes & Telefonia)
+    - name: 🗑️ REMOÇÃO FÍSICA DE MÓDULOS QUEBRADOS
       run: |
         cd twrp
         
-        echo "=== FASE 1: Desativando Docs (Soong Panic Fix) ==="
-        # Docs que já matamos antes
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs", enabled: false/g' {} +
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs"/"ds-docs", enabled: false/g' {} +
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched", enabled: false/g' {} +
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java", enabled: false/g' {} +
-        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"sdk-docs"/"sdk-docs", enabled: false/g' {} +
-
-        echo "=== FASE 2: Desativando Telefonia (Novo Erro) ==="
-        # Este é o culpado de agora. Vamos desativá-lo.
-        # Procuramos em toda a pasta frameworks, pois pode estar em base ou opt/telephony
-        find frameworks -type f -name "*.bp" -exec sed -i 's/"framework-telephony"/"framework-telephony", enabled: false/g' {} +
+        echo "=== APAGANDO PASTAS PROBLEMÁTICAS ==="
+        # O erro 'variable enabled is not set' ocorreu nestas pastas.
+        # Como o TWRP não usa nada disso, a solução mais segura é deletar a pasta inteira.
         
-        # Preventivo: Desativar também o telephony-common se ele aparecer
-        find frameworks -type f -name "*.bp" -exec sed -i 's/"telephony-common"/"telephony-common", enabled: false/g' {} +
+        # Erro: frameworks/opt/telephony
+        echo "Deletando Telefonia..."
+        rm -rf frameworks/opt/telephony
         
-        echo "=== FASE 3: Apagando Testes (CKATI Error Fix) ==="
-        echo "Caçando OverlayHostTests..."
-        find . -type d -name "OverlayHostTests" -exec rm -rf {} +
+        # Erro: frameworks/base/packages/SettingsProvider
+        echo "Deletando SettingsProvider..."
+        rm -rf frameworks/base/packages/SettingsProvider
         
-        echo "Caçando graphicsbenchmark..."
-        find . -type d -name "graphicsbenchmark" -exec rm -rf {} +
+        # Erro: frameworks/base/packages/WAPPushManager
+        echo "Deletando WAPPushManager..."
+        rm -rf frameworks/base/packages/WAPPushManager
         
-        echo "Caçando platform-compat..."
-        find . -type d -name "platform-compat" -exec rm -rf {} +
+        # Erro: frameworks/base/packages/SettingsLib/tests
+        echo "Deletando Testes do SettingsLib..."
+        rm -rf frameworks/base/packages/SettingsLib/tests
         
-        # Limpeza genérica
+        # Limpeza extra de testes (preventiva)
         rm -rf frameworks/base/tests
         rm -rf system/tools/hidl/test
 
-        echo "=== CONFIRMAÇÃO ==="
-        if grep -r "\"framework-telephony\", enabled: false" frameworks; then
-            echo "✅ SUCESSO: 'framework-telephony' desativado!"
+    - name: 🛡️ NEUTRALIZAÇÃO DE DOCS (Modo Seguro)
+      run: |
+        cd twrp
+        echo "=== RENOMEANDO MODULOS DE DOCS ==="
+        # Voltamos a usar o sufixo -KILLED.
+        # NÃO usamos 'enabled: false' aqui porque isso causou o erro de sintaxe anterior.
+        # Usamos o find global para garantir que pegamos todos os arquivos.
+        
+        # Substitui apenas a string do nome, mantendo a estrutura do arquivo intacta.
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"offline-sdk-docs"/"offline-sdk-docs-KILLED"/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs"/"ds-docs-KILLED"/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-switched"/"ds-docs-switched-KILLED"/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"ds-docs-java"/"ds-docs-java-KILLED"/g' {} +
+        find frameworks/base -type f -name "*.bp" -exec sed -i 's/"sdk-docs"/"sdk-docs-KILLED"/g' {} +
+
+        echo "=== VERIFICAÇÃO ==="
+        # Se acharmos "offline-sdk-docs" (sem o KILLED), falhamos.
+        if grep -r "\"offline-sdk-docs\"" frameworks/base; then
+            echo "❌ ERRO: A renomeação falhou!"
+            exit 1
         else
-            echo "⚠️ AVISO: Não achei 'framework-telephony' para desativar (talvez o nome seja diferente, mas o sed rodou)."
+            echo "✅ SUCESSO: Docs renomeados com segurança."
         fi
 
     - name: 🏗️ Compilar (Bootimage)
